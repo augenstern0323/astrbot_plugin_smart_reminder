@@ -1,5 +1,5 @@
 """
-AstrBot 智能提醒插件 (v2.4.5)
+AstrBot 智能提醒插件 (v2.4.6)
 支持：
 1. 日常提醒 - 引用消息/自然语言设置提醒，支持人名模糊识别(@别名→QQ号)
 2. 游戏组局召集 - "海不海"@分组群友，"康康、阿朱海不海"额外@指定人
@@ -33,7 +33,7 @@ WEEKDAY_CN = ["一", "二", "三", "四", "五", "六", "日"]
 AT_TAG_PATTERN = re.compile(r"\[at:(\d+|all)\]")
 
 
-@register("smart_reminder", "user", "智能提醒插件 - 支持提醒、游戏组局召集、生日祝贺", "2.4.5")
+@register("smart_reminder", "user", "智能提醒插件 - 支持提醒、游戏组局召集、生日祝贺", "2.4.6")
 class SmartReminderPlugin(Star):
     def __init__(self, context: Context, config: dict):
         super().__init__(context)
@@ -101,11 +101,17 @@ class SmartReminderPlugin(Star):
         if self.enable_birthday:
             enabled.append("生日祝福")
         logger.info(
-            "[SmartReminder] 插件已加载 v2.4.5，时区=%s，轮询间隔 %d 秒，已启用: %s，分组: %s，别名: %d 人",
-            self.timezone_str, self.poll_interval, "、".join(enabled) if enabled else "无",
+            "[SmartReminder] 插件已加载 v2.4.6，时区=%s，当前时间=%s，轮询间隔 %d 秒，已启用: %s，分组: %s，别名: %d 人",
+            self.timezone_str, self._now().strftime("%Y-%m-%d %H:%M:%S"),
+            self.poll_interval, "、".join(enabled) if enabled else "无",
             list(self.gaming_groups.keys()) if self.enable_gaming else "（未启用）",
             len(self.contact_aliases) if self.enable_reminder else 0
         )
+        if self.enable_birthday:
+            logger.info(
+                "[SmartReminder] 生日祝贺: 发送时间=%d点, 名单=%d人",
+                self.birthday_send_hour, len(self.birthday_list)
+            )
 
     async def terminate(self):
         """插件卸载时取消后台任务"""
@@ -787,20 +793,20 @@ class SmartReminderPlugin(Star):
     async def _check_birthdays(self):
         """检查是否有今天需要发送生日祝贺的人"""
         now = self._now()
-        today_str = now.strftime("%m-%d")  # MM-DD
+        today_str = now.strftime("%m-%d")  # MM-DD (带前导零，如 07-16)
         today_key = now.strftime("%Y-%m-%d")  # 用于记录已发送
 
         # 只在设定小时内触发（靠 birthday_sent 防重复）
         if now.hour != self.birthday_send_hour:
-            logger.debug(
-                "[SmartReminder] 生日检查: 当前小时=%d, 设定小时=%d, 不匹配, 跳过",
-                now.hour, self.birthday_send_hour
+            logger.info(
+                "[SmartReminder] 生日检查: 当前=%s (小时=%d), 设定小时=%d, 不匹配, 跳过",
+                now.strftime("%Y-%m-%d %H:%M:%S"), now.hour, self.birthday_send_hour
             )
             return
 
-        logger.debug(
-            "[SmartReminder] 生日检查: 当前小时=%d 匹配设定=%d, 今日生日人数=%d",
-            now.hour, self.birthday_send_hour, len(self.birthday_list)
+        logger.info(
+            "[SmartReminder] 生日检查: 当前=%s, 小时匹配(%d), 今日日期=%s, 名单=%d人",
+            now.strftime("%Y-%m-%d %H:%M:%S"), now.hour, today_str, len(self.birthday_list)
         )
 
         for entry in self.birthday_list:
@@ -811,8 +817,13 @@ class SmartReminderPlugin(Star):
             if not qq or not birthday or not group_id:
                 continue
 
-            # 检查是否是今天
-            if birthday != today_str:
+            # 标准化生日日期格式：支持 "7-16" 和 "07-16" 两种写法
+            birthday_normalized = self._normalize_date(birthday)
+            if birthday_normalized != today_str:
+                logger.info(
+                    "[SmartReminder] 生日跳过: qq=%s, 配置日期=%s(标准化=%s), 今日=%s, 不匹配",
+                    qq, birthday, birthday_normalized, today_str
+                )
                 continue
 
             # 检查今年是否已发送
@@ -882,6 +893,17 @@ class SmartReminderPlugin(Star):
         if match:
             return int(match.group(0))
         return None
+
+    @staticmethod
+    def _normalize_date(date_str: str) -> str:
+        """标准化日期格式为 MM-DD（带前导零）。
+        支持 "7-16" → "07-16", "07-16" → "07-16", "7月16日" → "07-16"
+        """
+        match = re.match(r"(\d{1,2})\D+(\d{1,2})", date_str.strip())
+        if match:
+            month, day = int(match.group(1)), int(match.group(2))
+            return f"{month:02d}-{day:02d}"
+        return date_str.strip()
 
     def _parse_absolute_time(self, value: str, now: datetime) -> Optional[datetime]:
         """解析绝对时间字符串，支持多种格式。返回带时区的 datetime。"""

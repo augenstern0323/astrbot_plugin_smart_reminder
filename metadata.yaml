@@ -2,7 +2,7 @@ name: smart_reminder
 display_name: 智能提醒
 short_desc: 日常提醒/游戏召集/生日祝贺，三大功能独立开关，含人名模糊识别自动@
 desc: 智能提醒插件 - 三大功能可独立开关：日常提醒(含人名模糊识别@)、游戏组局召集/上号提醒(含人名模糊识别@)、生日祝贺。
-version: v2.4.5
+version: v2.4.6
 author: augenstern0323
 repo: https://github.com/augenstern0323/astrbot_plugin_smart_reminder
 astrbot_version: ">=4.26.6"
