@@ -16,7 +16,7 @@
   "enable_birthday": {
     "type": "bool",
     "description": "启用生日祝福",
-    "hint": "开启后，插件会在生日当天零点自动发送祝贺消息到指定群。关闭则生日祝贺功能完全禁用。",
+    "hint": "开启后，插件会在生日当天指定时间自动发送祝贺消息到指定群。关闭则生日祝贺功能完全禁用。",
     "obvious_hint": true,
     "default": true
   },
@@ -155,11 +155,11 @@
     "obvious_hint": true,
     "default": "🎂 今天是 [at:{qq}] 的生日！祝你生日快乐，新的一年冒险等阶大涨！"
   },
-  "birthday_send_hour": {
-    "type": "int",
-    "description": "生日祝贺发送时间(小时)",
-    "hint": "生日当天几点发送祝贺消息，0表示零点。默认0。仅在「启用生日祝福」开启时生效。",
+  "birthday_send_time": {
+    "type": "string",
+    "description": "生日祝贺发送时间",
+    "hint": "生日当天发送祝贺的时间，HH:MM格式。如 00:00 零点、12:00 中午。默认 00:00。仅在「启用生日祝福」开启时生效。",
     "obvious_hint": true,
-    "default": 0
+    "default": "00:00"
   }
 }

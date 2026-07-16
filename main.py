@@ -1,5 +1,5 @@
 """
-AstrBot 智能提醒插件 (v2.4.6)
+AstrBot 智能提醒插件 (v2.5.0)
 支持：
 1. 日常提醒 - 引用消息/自然语言设置提醒，支持人名模糊识别(@别名→QQ号)
 2. 游戏组局召集 - "海不海"@分组群友，"康康、阿朱海不海"额外@指定人
@@ -33,7 +33,7 @@ WEEKDAY_CN = ["一", "二", "三", "四", "五", "六", "日"]
 AT_TAG_PATTERN = re.compile(r"\[at:(\d+|all)\]")
 
 
-@register("smart_reminder", "user", "智能提醒插件 - 支持提醒、游戏组局召集、生日祝贺", "2.4.6")
+@register("smart_reminder", "user", "智能提醒插件 - 支持提醒、游戏组局召集、生日祝贺", "2.5.0")
 class SmartReminderPlugin(Star):
     def __init__(self, context: Context, config: dict):
         super().__init__(context)
@@ -75,14 +75,26 @@ class SmartReminderPlugin(Star):
                     "qq_list": entry.get("qq_list", []),
                     "aliases": entry.get("aliases", [])
                 }
-        self.birthday_send_hour = int(config.get("birthday_send_hour", 0))
 
-        # ========== 生日配置 ==========
+        # ========== 生日祝贺配置 ==========
         self.birthday_list: list = config.get("birthday_list", [])
         self.birthday_message: str = config.get(
             "birthday_message",
             "🎂 今天是 [at:{qq}] 的生日！祝你生日快乐，新的一年冒险等阶大涨！"
         )
+        # 解析发送时间（HH:MM），兼容旧版 birthday_send_hour
+        send_time_str = str(config.get("birthday_send_time", "")).strip()
+        if not send_time_str:
+            # 旧版兼容：birthday_send_hour (int) → "HH:00"
+            old_hour = int(config.get("birthday_send_hour", 0))
+            send_time_str = f"{old_hour:02d}:00"
+        try:
+            parts = send_time_str.split(":")
+            self.birthday_send_hour = int(parts[0])
+            self.birthday_send_minute = int(parts[1]) if len(parts) > 1 else 0
+        except (ValueError, IndexError):
+            self.birthday_send_hour = 0
+            self.birthday_send_minute = 0
 
         # 数据持久化
         self.data_dir = StarTools.get_data_dir()
@@ -101,7 +113,7 @@ class SmartReminderPlugin(Star):
         if self.enable_birthday:
             enabled.append("生日祝福")
         logger.info(
-            "[SmartReminder] 插件已加载 v2.4.6，时区=%s，当前时间=%s，轮询间隔 %d 秒，已启用: %s，分组: %s，别名: %d 人",
+            "[SmartReminder] 插件已加载 v2.5.0，时区=%s，当前时间=%s，轮询间隔 %d 秒，已启用: %s，分组: %s，别名: %d 人",
             self.timezone_str, self._now().strftime("%Y-%m-%d %H:%M:%S"),
             self.poll_interval, "、".join(enabled) if enabled else "无",
             list(self.gaming_groups.keys()) if self.enable_gaming else "（未启用）",
@@ -109,8 +121,8 @@ class SmartReminderPlugin(Star):
         )
         if self.enable_birthday:
             logger.info(
-                "[SmartReminder] 生日祝贺: 发送时间=%d点, 名单=%d人",
-                self.birthday_send_hour, len(self.birthday_list)
+                "[SmartReminder] 生日祝贺: 发送时间=%02d:%02d, 名单=%d人",
+                self.birthday_send_hour, self.birthday_send_minute, len(self.birthday_list)
             )
 
     async def terminate(self):
@@ -791,105 +803,98 @@ class SmartReminderPlugin(Star):
             logger.info("[SmartReminder] 提醒 %s 已发送至 %s", reminder["id"], umo)
 
     async def _check_birthdays(self):
-        """检查是否有今天需要发送生日祝贺的人"""
-        now = self._now()
-        today_str = now.strftime("%m-%d")  # MM-DD (带前导零，如 07-16)
-        today_key = now.strftime("%Y-%m-%d")  # 用于记录已发送
+        """检查是否有今天需要发送生日祝贺的人。
 
-        # 只在设定小时内触发（靠 birthday_sent 防重复）
-        if now.hour != self.birthday_send_hour:
-            logger.info(
-                "[SmartReminder] 生日检查: 当前=%s (小时=%d), 设定小时=%d, 不匹配, 跳过",
-                now.strftime("%Y-%m-%d %H:%M:%S"), now.hour, self.birthday_send_hour
-            )
+        触发条件：当前时间在设定时间的 2 分钟窗口内（防止 30 秒轮询跳过整点）。
+        防重复：通过 birthday_sent.json 记录，同一天同一个人只发一次。
+        不补发：如果插件启动时已过了设定时间窗口，当天不再发送。
+        """
+        now = self._now()
+        today_str = now.strftime("%m-%d")           # 如 "07-16"
+        today_key = now.strftime("%Y-%m-%d")         # 如 "2026-07-16"
+
+        # 计算当前和设定的「分钟数」（从零点起算），用于窗口判断
+        now_minutes = now.hour * 60 + now.minute
+        config_minutes = self.birthday_send_hour * 60 + self.birthday_send_minute
+
+        # 2 分钟触发窗口：[config_minutes, config_minutes + 1]
+        if now_minutes < config_minutes or now_minutes > config_minutes + 1:
             return
 
-        logger.info(
-            "[SmartReminder] 生日检查: 当前=%s, 小时匹配(%d), 今日日期=%s, 名单=%d人",
-            now.strftime("%Y-%m-%d %H:%M:%S"), now.hour, today_str, len(self.birthday_list)
-        )
-
+        # 在窗口内，开始逐个检查名单
         for entry in self.birthday_list:
-            qq = entry.get("qq", "")
-            birthday = entry.get("birthday", "")
-            group_id = entry.get("group_id", "")
+            qq = str(entry.get("qq", "")).strip()
+            birthday_raw = str(entry.get("birthday", "")).strip()
+            group_id = str(entry.get("group_id", "")).strip()
 
-            if not qq or not birthday or not group_id:
+            # --- 跳过检查 1：字段不完整 ---
+            if not qq or not birthday_raw or not group_id:
                 logger.info(
-                    "[SmartReminder] 生日跳过: qq=%s, birthday=%s, group_id=%s, 字段不完整, 跳过",
-                    qq, birthday, group_id
+                    "[SmartReminder] 生日跳过: qq=%s, birthday=%s, group=%s → 字段不完整",
+                    qq, birthday_raw, group_id
                 )
                 continue
 
-            # 标准化生日日期格式：支持 "7-16" 和 "07-16" 两种写法
-            birthday_normalized = self._normalize_date(birthday)
+            # --- 跳过检查 2：日期不匹配 ---
+            birthday_normalized = self._normalize_date(birthday_raw)
             if birthday_normalized != today_str:
                 logger.info(
-                    "[SmartReminder] 生日跳过: qq=%s, 配置日期=%s(标准化=%s), 今日=%s, 不匹配",
-                    qq, birthday, birthday_normalized, today_str
+                    "[SmartReminder] 生日跳过: qq=%s, 生日=%s(→%s), 今日=%s → 日期不匹配",
+                    qq, birthday_raw, birthday_normalized, today_str
                 )
                 continue
 
-            # 检查今年是否已发送
+            # --- 跳过检查 3：今天已发送过 ---
             sent_key = f"{today_key}_{qq}"
             if self.birthday_sent.get(sent_key):
                 logger.info(
-                    "[SmartReminder] 生日跳过: qq=%s, 今日(%s)已发送过, 跳过",
+                    "[SmartReminder] 生日跳过: qq=%s → 今天(%s)已发送过",
                     qq, today_key
                 )
                 continue
 
-            # 构建祝贺消息
-            msg_text = self.birthday_message.replace("{qq}", qq)
-            # [at:{qq}] 占位符会在 on_decorating_result 中被转换
-            # 但这里是后台发送，不走 LLM，需要直接构建 At 组件
-            msg = MessageChain()
-            # 替换 [at:{qq}] 为真实 At 组件 + 纯文本
-            parts = re.split(r"\[at:\{qq\}\]", msg_text)
-            if len(parts) > 1:
-                # 有 @ 占位符
-                msg = msg.at(qq, qq)
-                if parts[1]:
-                    msg = msg.message(parts[1])
-            else:
-                # 没有 @ 占位符，检查是否有 [at:xxx] 格式
-                final_text = msg_text
-                # 直接把 [at:QQ号] 替换为名字占位，后面通过 at 组件处理
-                at_matches = AT_TAG_PATTERN.finditer(msg_text)
-                if at_matches:
-                    # 需要拆分文本和 At 组件
-                    new_chain = []
-                    last_idx = 0
-                    for match in AT_TAG_PATTERN.finditer(msg_text):
-                        start, end = match.span()
-                        if start > last_idx:
-                            new_chain.append(Plain(msg_text[last_idx:start]))
-                        target_id = match.group(1)
-                        new_chain.append(At(qq=target_id))
-                        new_chain.append(Plain("\u200b "))
-                        last_idx = end
-                    if last_idx < len(msg_text):
-                        new_chain.append(Plain(msg_text[last_idx:]))
-                    msg.chain = new_chain
-                else:
-                    msg = msg.message(final_text)
+            # --- 发送祝贺 ---
+            logger.info("[SmartReminder] 生日匹配! qq=%s, 群=%s, 开始发送...", qq, group_id)
+            await self._send_birthday_message(qq, group_id, sent_key)
 
-            # 发送到指定群（unified_msg_origin 必须为 3 部分: platform:MessageType:sessionId）
-            umo = f"aiocqhttp:GroupMessage:{group_id}"
-            try:
-                await self.context.send_message(umo, msg)
-                # 记录已发送
-                self.birthday_sent[sent_key] = True
-                await self._save_birthday_sent()
-                logger.info(
-                    "[SmartReminder] 生日祝贺已发送: qq=%s, group=%s",
-                    qq, group_id
-                )
-            except Exception as e:
-                logger.error(
-                    "[SmartReminder] 发送生日祝贺失败: qq=%s, group=%s, error=%s",
-                    qq, group_id, e
-                )
+    async def _send_birthday_message(self, qq: str, group_id: str, sent_key: str):
+        """构建并发送生日祝贺消息，然后记录到 birthday_sent。"""
+        # 替换 {qq} 占位符
+        msg_text = self.birthday_message.replace("{qq}", qq)
+
+        # 构建 MessageChain：将 [at:xxx] 标签转为 At 组件，其余为 Plain 文本
+        msg = MessageChain()
+        last_idx = 0
+        found_at = False
+        for match in AT_TAG_PATTERN.finditer(msg_text):
+            found_at = True
+            start, end = match.span()
+            # 标签前的纯文本
+            if start > last_idx:
+                msg = msg.message(msg_text[last_idx:start])
+            # At 组件
+            target_id = match.group(1)
+            msg = msg.at(target_id, target_id)
+            last_idx = end
+
+        # 标签后的剩余文本
+        if last_idx < len(msg_text):
+            msg = msg.message(msg_text[last_idx:])
+        elif not found_at:
+            # 整条消息没有 @ 标签
+            msg = msg.message(msg_text)
+
+        # 发送到群（umo 格式: platform:MessageType:sessionId，必须 3 部分）
+        umo = f"aiocqhttp:GroupMessage:{group_id}"
+        try:
+            await self.context.send_message(umo, msg)
+            self.birthday_sent[sent_key] = True
+            await self._save_birthday_sent()
+            logger.info("[SmartReminder] 生日祝贺已发送: qq=%s, 群=%s", qq, group_id)
+        except Exception as e:
+            logger.error(
+                "[SmartReminder] 生日祝贺发送失败: qq=%s, 群=%s, 错误=%s", qq, group_id, e
+            )
 
     # ============================================================
     # 时间解析工具
