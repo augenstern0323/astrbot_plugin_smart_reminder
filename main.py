@@ -815,6 +815,10 @@ class SmartReminderPlugin(Star):
             group_id = entry.get("group_id", "")
 
             if not qq or not birthday or not group_id:
+                logger.info(
+                    "[SmartReminder] 生日跳过: qq=%s, birthday=%s, group_id=%s, 字段不完整, 跳过",
+                    qq, birthday, group_id
+                )
                 continue
 
             # 标准化生日日期格式：支持 "7-16" 和 "07-16" 两种写法
@@ -829,6 +833,10 @@ class SmartReminderPlugin(Star):
             # 检查今年是否已发送
             sent_key = f"{today_key}_{qq}"
             if self.birthday_sent.get(sent_key):
+                logger.info(
+                    "[SmartReminder] 生日跳过: qq=%s, 今日(%s)已发送过, 跳过",
+                    qq, today_key
+                )
                 continue
 
             # 构建祝贺消息
