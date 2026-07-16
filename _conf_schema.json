@@ -1,0 +1,165 @@
+{
+  "enable_reminder": {
+    "type": "bool",
+    "description": "启用日常提醒",
+    "hint": "开启后，LLM 可通过自然语言设置普通提醒（如「提醒我30分钟后抢票」），指令 /remind 也可用。关闭则此功能完全禁用。",
+    "obvious_hint": true,
+    "default": true
+  },
+  "enable_gaming": {
+    "type": "bool",
+    "description": "启用游戏提醒",
+    "hint": "开启后，LLM 可通过自然语言召集游戏分组（如「海不海」）和设置上号提醒（如「提醒大家上号」）。关闭则召集和游戏提醒功能完全禁用。",
+    "obvious_hint": true,
+    "default": true
+  },
+  "enable_birthday": {
+    "type": "bool",
+    "description": "启用生日祝福",
+    "hint": "开启后，插件会在生日当天零点自动发送祝贺消息到指定群。关闭则生日祝贺功能完全禁用。",
+    "obvious_hint": true,
+    "default": true
+  },
+  "poll_interval": {
+    "type": "int",
+    "description": "提醒检查间隔(秒)",
+    "hint": "后台循环检查提醒任务的频率。默认 30 秒。",
+    "obvious_hint": true,
+    "default": 30
+  },
+  "timezone": {
+    "type": "string",
+    "description": "时区设置",
+    "hint": "解析绝对时间时使用的时区，如 Asia/Shanghai。默认使用系统时区。",
+    "obvious_hint": true,
+    "default": "Asia/Shanghai"
+  },
+  "enable_llm_tool": {
+    "type": "bool",
+    "description": "启用 LLM 工具调用",
+    "hint": "允许 LLM 通过自然语言调用提醒/召集工具。关闭则只能通过指令设置。",
+    "obvious_hint": true,
+    "default": true
+  },
+  "inject_time_context": {
+    "type": "bool",
+    "description": "注入时间上下文",
+    "hint": "在 LLM 请求中注入当前时间和引用消息内容，帮助 LLM 解析时间表达。建议开启。",
+    "obvious_hint": true,
+    "default": true
+  },
+  "contact_aliases": {
+    "type": "template_list",
+    "description": "联系人称呼别名表",
+    "hint": "当用户说「提醒啊哈上线」时，LLM 会从别名表中识别「啊哈」→QQ号，提醒触发时自动@该人。别名在游戏召集和游戏提醒中也生效。仅在「日常提醒」或「游戏提醒」开启时生效。",
+    "obvious_hint": true,
+    "default": [],
+    "templates": {
+      "default": {
+        "name": "联系人",
+        "display_item": "qq",
+        "items": {
+          "qq": {
+            "description": "QQ号",
+            "type": "string",
+            "hint": "该联系人的QQ号",
+            "default": ""
+          },
+          "aliases": {
+            "description": "称呼别名列表",
+            "type": "list",
+            "hint": "该联系人的所有称呼，如[\"小A\",\"AA\",\"啊哈\"]",
+            "default": []
+          }
+        }
+      }
+    }
+  },
+  "gaming_groups": {
+    "type": "template_list",
+    "description": "游戏分组配置",
+    "hint": "添加游戏分组，每个分组包含名称、QQ号列表和别名关键词。如分组「海」和「瓦」。仅在「启用游戏提醒」开启时生效。",
+    "obvious_hint": true,
+    "default": [],
+    "templates": {
+      "default": {
+        "name": "游戏分组",
+        "display_item": "group_name",
+        "items": {
+          "group_name": {
+            "description": "分组名称",
+            "type": "string",
+            "hint": "分组简称，如\"海\"\"瓦\"，用户说\"海不海\"时会匹配此名称",
+            "default": ""
+          },
+          "qq_list": {
+            "description": "分组QQ号列表",
+            "type": "list",
+            "hint": "该分组包含的所有QQ号，召集时自动@这些人",
+            "default": []
+          },
+          "aliases": {
+            "description": "分组别名/关键词",
+            "type": "list",
+            "hint": "用于模糊匹配的关键词列表，如[\"海\", \"海克斯\"]",
+            "default": []
+          }
+        }
+      }
+    }
+  },
+  "reminder_advance_minutes": {
+    "type": "int",
+    "description": "游戏上号提醒提前量(分钟)",
+    "hint": "设置游戏上号提醒时，提前多少分钟提醒。默认5分钟。仅在「启用游戏提醒」开启时生效。",
+    "obvious_hint": true,
+    "default": 5
+  },
+  "birthday_list": {
+    "type": "template_list",
+    "description": "生日祝贺名单",
+    "hint": "添加需要生日祝贺的群友。每项包含QQ号、生日日期(MM-DD)和发送祝贺的目标群号。仅在「启用生日祝福」开启时生效。",
+    "obvious_hint": true,
+    "default": [],
+    "templates": {
+      "default": {
+        "name": "生日祝贺",
+        "display_item": "qq",
+        "items": {
+          "qq": {
+            "description": "QQ号",
+            "type": "string",
+            "hint": "过生日的人的QQ号",
+            "default": ""
+          },
+          "birthday": {
+            "description": "生日日期",
+            "type": "string",
+            "hint": "MM-DD格式，如\"01-15\"",
+            "default": ""
+          },
+          "group_id": {
+            "description": "发送祝贺的目标群号",
+            "type": "string",
+            "hint": "祝贺消息发送到哪个群",
+            "default": ""
+          }
+        }
+      }
+    }
+  },
+  "birthday_message": {
+    "type": "string",
+    "description": "生日祝贺文案",
+    "hint": "预设文案，支持占位符: {qq}(QQ号)、[at:{qq}](自动转为@)。例如: \"🎂 今天是 [at:{qq}] 的生日！祝你生日快乐，新的一年冒险等阶大涨！\"。仅在「启用生日祝福」开启时生效。",
+    "obvious_hint": true,
+    "default": "🎂 今天是 [at:{qq}] 的生日！祝你生日快乐，新的一年冒险等阶大涨！"
+  },
+  "birthday_send_hour": {
+    "type": "int",
+    "description": "生日祝贺发送时间(小时)",
+    "hint": "生日当天几点发送祝贺消息，0表示零点。默认0。仅在「启用生日祝福」开启时生效。",
+    "obvious_hint": true,
+    "default": 0
+  }
+}
